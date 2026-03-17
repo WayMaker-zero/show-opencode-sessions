@@ -1,10 +1,8 @@
 # Show OpenCode Sessions
 
-一个为 [OpenCode](https://github.com/habbylabs/opencode) CLI 用户量身定制的**本地历史会话可视化面板**。
+一个为 OpenCode 用户量身定制的**本地历史会话可视化面板**。
 
 在纯命令行使用 OpenCode 时，由于只有标题，找回几天前的复杂开发上下文往往像大海捞针一样困难。本项目致力于解决这一痛点，通过提供一个简洁大气的 Web 页面，让你一目了然地搜索、预览、找回你的所有 OpenCode 开发历史。
-
-![预览图](https://placehold.co/800x400?text=OpenCode+Sessions+UI) <!-- 建议之后替换为真实的软件截图 -->
 
 ## 🌟 核心特性
 
@@ -36,15 +34,12 @@
 
 ---
 
-### 方式二：开发者手动克隆运行 (极客推荐)
+### 方式二：开发者手动克隆运行 (开发者推荐)
 
 如果你是一名前端工程师，想要查看源码或者在本地自行构建：
 
 1. 克隆本仓库到本地：
-   ```bash
-   git clone https://github.com/your-username/show-opencode-sessions.git
-   cd show-opencode-sessions
-   ```
+   
 2. 安装依赖 (推荐 Node.js v18+)：
    ```bash
    npm install
@@ -72,7 +67,3 @@
   - **生产环境 (双击版)**：使用 `esbuild` 将 Node.js 服务端入口与前端静态资源，利用 `pkg` 打包成一个内嵌 Web 服务器和浏览引擎控制逻辑的独立二进制文件。
 
 如果你对这套架构如何实现感兴趣，请阅读更详细的开发者文档 👉 [Docs/Code_Wiki.md](./Docs/Code_Wiki.md)。
-
-## 📝 License
-
-MIT
