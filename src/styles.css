@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+  font-family: 'Manrope', sans-serif;
+  --font-display: 'Fraunces', serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.session-card,
+.session-card-active {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  padding: 1rem;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.session-card {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 40px rgba(71, 53, 34, 0.08);
+}
+
+.session-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(20, 32, 46, 0.16);
+}
+
+.session-card-active {
+  background: linear-gradient(145deg, rgba(29, 39, 57, 0.96), rgba(91, 53, 38, 0.92));
+  box-shadow: 0 24px 56px rgba(39, 31, 22, 0.22);
+}
+
+.session-card-active h2,
+.session-card-active p,
+.session-card-active span {
+  color: white !important;
+}
+
+.session-card-active::after {
+  content: '';
+  position: absolute;
+  inset: auto -10% -48% auto;
+  height: 160px;
+  width: 160px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 211, 138, 0.34), transparent 68%);
+}
+
+.session-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(51, 65, 85, 0.2) transparent;
+}
+
+.session-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.session-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.18);
+}
+
+.message-card {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  padding: 1rem;
+}
+
+.message-card-assistant {
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 40px rgba(66, 48, 30, 0.06);
+}
+
+.message-card-user {
+  background: rgba(242, 236, 227, 0.95);
+}
+
+.animate-rise {
+  animation: rise 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.animate-card {
+  animation: card-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .message-card {
+    padding: 0.9rem;
+  }
+}
