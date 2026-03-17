@@ -208,11 +208,38 @@ export default function App() {
       return
     }
 
+    const command = formatCommand(selectedId)
+
     try {
-      await navigator.clipboard.writeText(formatCommand(selectedId))
-      setCopied(true)
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(command)
+        setCopied(true)
+        setError('')
+      } else {
+        throw new Error('Clipboard API not available')
+      }
     } catch {
-      setError(text.copyError)
+      try {
+        const textArea = document.createElement('textarea')
+        textArea.value = command
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-999999px'
+        textArea.style.top = '-999999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        const successful = document.execCommand('copy')
+        textArea.remove()
+        
+        if (successful) {
+          setCopied(true)
+          setError('')
+        } else {
+          setError(text.copyError)
+        }
+      } catch (fallbackErr) {
+        setError(text.copyError)
+      }
     }
   }
 
