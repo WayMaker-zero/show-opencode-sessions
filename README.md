@@ -20,17 +20,19 @@
 
 ### 方式一：下载单文件独立版（小白推荐，双击即用）
 
-这是最简单的使用方式，**你不需要懂代码，也不需要安装 Node.js 或者配环境**。
+这是最简单的使用方式，**你不需要懂代码，也不需要打开终端或者配环境**。
 
 1. 进入当前仓库的 [Releases 页面](#)（发布页面）。
-2. 根据你的操作系统，下载对应的单文件：
-   - 🍏 Mac (M 芯片)：下载 `show-opencode-sessions-macos-arm64`
-   - 🍏 Mac (Intel 芯片)：下载 `show-opencode-sessions-macos-x64`
-   - 🪟 Windows：下载 `show-opencode-sessions-win-x64.exe`
-   - 🐧 Linux：下载 `show-opencode-sessions-linux-x64`
-3. 下载后，直接**双击运行**该文件！
-   > 💡 *提示：如果是 Mac/Linux 用户，首次运行前可能需要在终端中执行 `chmod +x <下载的文件>` 赋予可执行权限。*
-4. 程序会在后台静默启动服务，并**自动打开你的默认浏览器**，直接展示你的历史记录！
+2. 根据你的操作系统，下载对应的压缩包：
+   - 🍏 Mac (M 芯片)：下载 `show-opencode-sessions-macos-arm64.tar.gz`
+   - 🍏 Mac (Intel 芯片)：下载 `show-opencode-sessions-macos-x64.tar.gz`
+   - 🪟 Windows：下载 `show-opencode-sessions-win-x64.zip`
+   - 🐧 Linux：下载 `show-opencode-sessions-linux-x64.tar.gz`
+3. 下载后，直接**双击解压缩**。
+   *(得益于打包机制，解压出来的程序天然自带执行权限，你不需要懂什么是 `chmod`)*
+4. 双击运行解压出来的程序文件！
+   > 💡 *提示：如果是 macOS 用户，首次运行如果遇到“不受信任的开发者”弹窗，只需去系统「设置 -> 隐私与安全性」中点击一下「仍要打开」即可。*
+5. 程序会在后台静默启动服务，并**自动打开你的默认浏览器**，直接展示你的历史记录！
 
 ---
 
