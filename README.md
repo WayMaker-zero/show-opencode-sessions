@@ -22,7 +22,7 @@
 
 这是最简单的使用方式，**你不需要懂代码，也不需要打开终端或者配环境**。
 
-1. 进入当前仓库的 [Releases 页面](#)（发布页面）。
+1. 进入当前仓库的 [Releases 页面](../../releases)（发布页面）。
 2. 根据你的操作系统，下载对应的压缩包：
    - 🍏 Mac (M 芯片)：下载 `show-opencode-sessions-macos-arm64.tar.gz`
    - 🍏 Mac (Intel 芯片)：下载 `show-opencode-sessions-macos-x64.tar.gz`
