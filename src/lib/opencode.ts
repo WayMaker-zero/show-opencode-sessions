@@ -14,12 +14,25 @@ export type SessionListItem = {
   preview: string
 }
 
+export type SessionMessagePart = {
+  id: string
+  type: string
+  text?: string
+  tool?: string
+  input?: any
+  output?: any
+  files?: string[]
+  filename?: string
+  data?: any
+}
+
 export type SessionMessage = {
   id: string
   role: 'user' | 'assistant'
   createdAt: number
   modelLabel?: string
   text: string
+  parts: SessionMessagePart[]
 }
 
 export type SessionDetail = {

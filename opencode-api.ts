@@ -51,12 +51,25 @@ export type SessionListItem = {
   preview: string
 }
 
+export type SessionMessagePart = {
+  id: string
+  type: string
+  text?: string
+  tool?: string
+  input?: any
+  output?: any
+  files?: string[]
+  filename?: string
+  data?: any
+}
+
 export type SessionMessage = {
   id: string
   role: 'user' | 'assistant'
   createdAt: number
   modelLabel?: string
   text: string
+  parts: SessionMessagePart[]
 }
 
 export type SessionDetail = {
@@ -375,7 +388,22 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
           model?: { modelID?: string; providerID?: string }
         }>(row.data)
 
-        const parts = (groupedParts.get(row.id) ?? []).map((part) => partToText(part.data)).filter(Boolean)
+        const rawParts = groupedParts.get(row.id) ?? []
+        const parsedParts = rawParts.map(part => {
+          let payload = safeParse<any>(part.data) || {}
+          return {
+            id: part.id,
+            type: payload.type || 'unknown',
+            text: payload.text,
+            tool: payload.tool,
+            input: payload.state?.input,
+            output: payload.state?.output,
+            files: payload.files,
+            filename: payload.filename,
+            data: payload
+          } as SessionMessagePart
+        })
+        const parts = rawParts.map((part) => partToText(part.data)).filter(Boolean)
         const text = parts.join('\n\n').trim()
         const provider = meta?.providerID ?? meta?.model?.providerID
         const model = meta?.modelID ?? meta?.model?.modelID
@@ -386,9 +414,10 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
           createdAt: meta?.time?.created ?? row.time_created,
           modelLabel: [provider, model].filter(Boolean).join(' / ') || undefined,
           text,
+          parts: parsedParts
         } satisfies SessionMessage
       })
-      .filter((message) => message.text)
+      .filter((message) => message.text || message.parts.length > 0)
 
     return { session, messages }
   } finally {

@@ -7,6 +7,9 @@ import {
   Search,
   User,
   Bot,
+  Moon,
+  Sun,
+  Languages
 } from 'lucide-react'
 import {
   getMeta,
@@ -15,6 +18,8 @@ import {
   type SessionDetail,
   type SessionListItem,
 } from './lib/opencode'
+import { useThemeLang, t } from './lib/theme-lang'
+import { MessagePartView } from './components/MessagePartView'
 
 function formatShortDate(value: number) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -40,6 +45,9 @@ function formatCommand(sessionId: string) {
 }
 
 export default function App() {
+  const { theme, setTheme, lang, setLang } = useThemeLang()
+  const text = t[lang]
+  
   const [booting, setBooting] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -96,7 +104,7 @@ export default function App() {
         return source[0]?.id ?? null
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : '读取历史失败。')
+      setError(err instanceof Error ? err.message : text.readError)
     } finally {
       setLoadingList(false)
       setLoadingMore(false)
@@ -115,7 +123,7 @@ export default function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : '无法读取本机 opencode 目录。')
+          setError(err instanceof Error ? err.message : text.bootError)
           setBooting(false)
         }
       }
@@ -160,7 +168,7 @@ export default function App() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : '读取会话详情失败。')
+          setError(err instanceof Error ? err.message : text.readDetailError)
         }
       })
       .finally(() => {
@@ -204,59 +212,82 @@ export default function App() {
       await navigator.clipboard.writeText(formatCommand(selectedId))
       setCopied(true)
     } catch {
-      setError('复制失败，请检查剪贴板权限。')
+      setError(text.copyError)
     }
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f3ecdd_0%,#ede5d6_100%)] text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 py-4 sm:px-6 lg:px-8">
-        <div className="animate-rise mb-4 flex items-center gap-3 rounded-[24px] border border-white/70 bg-white/78 p-3 shadow-[0_18px_50px_rgba(66,48,30,0.08)] backdrop-blur-xl sm:p-4">
+    <div className="min-h-screen text-slate-900 dark:text-slate-200">
+      <div className="mx-auto flex h-screen max-w-[1500px] flex-col px-4 py-4 sm:px-6 lg:px-8">
+        
+        {/* Header Section */}
+        <div className="animate-rise mb-4 flex items-center gap-3 rounded-3xl border border-slate-200/60 bg-white/60 p-3 shadow-sm backdrop-blur-xl sm:p-4 dark:border-slate-800 dark:bg-slate-900/60">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索标题或正文"
-              className="h-12 w-full rounded-2xl border border-slate-200/90 bg-white pl-11 pr-4 text-sm outline-none transition focus:border-slate-400"
+              placeholder={text.searchPlaceholder}
+              className="h-11 w-full rounded-2xl border border-slate-200 bg-white/80 pl-11 pr-4 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:focus:border-slate-500"
             />
           </div>
 
           <button
             type="button"
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/80 border border-slate-200 text-slate-600 transition hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            title="Toggle Language"
+          >
+            <Languages className="h-4 w-4" />
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/80 border border-slate-200 text-slate-600 transition hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
+          <button
+            type="button"
             onClick={handleCopy}
             disabled={!selectedId}
-            className="inline-flex h-12 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? '已复制' : '复制命令'}
+            {copied ? text.copied : text.copyCommand}
           </button>
         </div>
 
-        {error ? (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-400">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
-        ) : null}
+        )}
 
-        <div className="grid flex-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="animate-rise flex min-h-[70vh] flex-col rounded-[28px] border border-white/70 bg-white/78 p-3 shadow-[0_18px_50px_rgba(66,48,30,0.08)] backdrop-blur-xl sm:p-4">
-            <div className="mb-3 flex items-center justify-between px-1 text-xs text-slate-500">
-              <span>{search.trim() ? `找到 ${total} 条` : '最近会话'}</span>
-              <span>{loadingList ? '更新中' : `${sessions.length}/${total || sessions.length}`}</span>
+        {/* Main Content Area */}
+        <div className="grid flex-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)] min-h-0">
+          
+          {/* Sidebar: Session List */}
+          <aside className="animate-rise flex flex-col rounded-3xl border border-slate-200/60 bg-white/60 p-3 shadow-sm backdrop-blur-xl sm:p-4 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
+            <div className="mb-3 flex items-center justify-between px-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>{search.trim() ? `${text.found} ${total} ${text.items}` : text.recentSessions}</span>
+              <span>{loadingList ? text.updating : `${sessions.length}/${total || sessions.length}`}</span>
             </div>
 
-            <div ref={listRef} onScroll={handleListScroll} className="session-scroll flex-1 space-y-3 overflow-y-auto pr-1">
+            <div ref={listRef} onScroll={handleListScroll} className="session-scroll flex-1 space-y-3 overflow-y-auto pr-2 pb-4">
               {booting || loadingList ? (
                 Array.from({ length: 6 }).map((_, index) => (
-                  <div key={index} className="h-28 animate-pulse rounded-[22px] border border-white/80 bg-white/70" />
+                  <div key={index} className="h-28 animate-pulse rounded-[22px] bg-slate-200/50 dark:bg-slate-800/50" />
                 ))
               ) : null}
 
               {!booting && !loadingList && !sessions.length ? (
-                <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-dashed border-slate-300 bg-white/55 px-6 text-center text-sm leading-7 text-slate-500">
-                  没有找到对应会话
+                <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-dashed border-slate-300 bg-white/50 px-6 text-center text-sm leading-7 text-slate-500 dark:border-slate-700 dark:bg-slate-800/30">
+                  {text.noSessionFound}
                 </div>
               ) : null}
 
@@ -268,49 +299,50 @@ export default function App() {
                     key={session.id}
                     type="button"
                     onClick={() => setSelectedId(session.id)}
-                    className={selected ? 'session-card-active' : 'session-card'}
+                    className={selected ? 'session-card-active w-full text-left' : 'session-card w-full text-left'}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <h2 className="line-clamp-2 text-left text-[15px] font-semibold leading-6 text-slate-950">
-                        {session.title || '未命名会话'}
+                      <h2 className="line-clamp-2 text-[14px] font-semibold leading-relaxed">
+                        {session.title || text.unnamedSession}
                       </h2>
-                      <span className="shrink-0 text-[11px] text-slate-400">{formatShortDate(session.updatedAt)}</span>
+                      <span className="shrink-0 text-[10px] opacity-70 mt-1">{formatShortDate(session.updatedAt)}</span>
                     </div>
-                    <p className="mt-2 line-clamp-3 text-left text-sm leading-6 text-slate-600">
-                      {session.preview || '没有可展示的正文预览'}
+                    <p className="mt-2 line-clamp-2 text-xs leading-relaxed opacity-80">
+                      {session.preview || text.noPreview}
                     </p>
                   </button>
                 )
               })}
 
               <div className="flex h-10 items-center justify-center text-xs text-slate-400">
-                {loadingMore ? <LoaderCircle className="h-4 w-4 animate-spin" /> : hasMore ? '继续下滑加载更多' : null}
+                {loadingMore ? <LoaderCircle className="h-4 w-4 animate-spin" /> : hasMore ? text.loadMore : null}
               </div>
             </div>
           </aside>
 
-          <section className="animate-rise flex min-h-[70vh] flex-col rounded-[28px] border border-white/70 bg-white/78 p-4 shadow-[0_18px_50px_rgba(66,48,30,0.08)] backdrop-blur-xl sm:p-5">
-            {selectedSession ? (
-              <div className="mb-4 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,241,232,0.94))] px-4 py-4 sm:px-5">
+          {/* Main Area: Session Detail */}
+          <section className="animate-rise flex flex-col rounded-3xl border border-slate-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
+            {selectedSession && (
+              <div className="mb-4 rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 dark:border-slate-700/80 dark:bg-slate-800/80">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <h1 className="font-display line-clamp-2 text-2xl leading-tight text-slate-950 sm:text-3xl">
-                      {selectedSession.title || '未命名会话'}
+                    <h1 className="line-clamp-2 text-xl font-bold leading-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                      {selectedSession.title || text.unnamedSession}
                     </h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <span>{formatLongDate(selectedSession.updatedAt)}</span>
-                      <span className="font-mono text-[11px] text-slate-400">{selectedSession.id}</span>
+                      <span className="font-mono text-[10px] opacity-70">{selectedSession.id}</span>
                     </div>
                   </div>
 
-                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
-                    {detail?.messages.length ?? 0} 条消息
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                    {detail?.messages.length ?? 0} {text.messagesCount}
                   </div>
                 </div>
               </div>
-            ) : null}
+            )}
 
-            <div className="session-scroll flex-1 overflow-y-auto pr-1">
+            <div className="session-scroll flex-1 overflow-y-auto pr-2 pb-4">
               {loadingDetail ? (
                 <div className="flex min-h-[320px] items-center justify-center text-slate-500">
                   <LoaderCircle className="h-5 w-5 animate-spin" />
@@ -318,7 +350,7 @@ export default function App() {
               ) : null}
 
               {!loadingDetail && detail ? (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {detail.messages.map((message) => {
                     const isAssistant = message.role === 'assistant'
 
@@ -331,20 +363,35 @@ export default function App() {
                             : 'message-card message-card-user'
                         }
                       >
-                        <div className="mb-3 flex items-center gap-3 text-xs text-slate-500">
+                        <div className="mb-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                           <div
                             className={
                               isAssistant
-                                ? 'flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-950 text-white'
-                                : 'flex h-8 w-8 items-center justify-center rounded-2xl bg-white text-slate-900'
+                                ? 'flex h-7 w-7 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                                : 'flex h-7 w-7 items-center justify-center rounded-xl bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
                             }
                           >
                             {isAssistant ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
                           </div>
                           <span>{formatLongDate(message.createdAt)}</span>
-                          {message.modelLabel ? <span>{message.modelLabel}</span> : null}
+                          {message.modelLabel && (
+                            <span className="rounded bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
+                              {message.modelLabel}
+                            </span>
+                          )}
                         </div>
-                        <div className="whitespace-pre-wrap text-[15px] leading-8 text-slate-700">{message.text}</div>
+                        
+                        <div className="space-y-1">
+                          {message.parts && message.parts.length > 0 ? (
+                            message.parts.map((part, idx) => (
+                              <MessagePartView key={part.id || idx} part={part} />
+                            ))
+                          ) : (
+                            <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+                              {message.text}
+                            </div>
+                          )}
+                        </div>
                       </article>
                     )
                   })}
@@ -352,8 +399,8 @@ export default function App() {
               ) : null}
 
               {!loadingDetail && !detail && !booting ? (
-                <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500">
-                  选择左侧会话查看内容
+                <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                  {text.selectSession}
                 </div>
               ) : null}
             </div>
