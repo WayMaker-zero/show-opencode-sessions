@@ -249,16 +249,6 @@ export default function App() {
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
-
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={!selectedId}
-            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? text.copied : text.copyCommand}
-          </button>
         </div>
 
         {error && (
@@ -323,20 +313,34 @@ export default function App() {
           {/* Main Area: Session Detail */}
           <section className="animate-rise flex flex-col rounded-3xl border border-slate-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
             {selectedSession && (
-              <div className="mb-4 rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 dark:border-slate-700/80 dark:bg-slate-800/80">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h1 className="line-clamp-2 text-xl font-bold leading-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
-                      {selectedSession.title || text.unnamedSession}
-                    </h1>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{formatLongDate(selectedSession.updatedAt)}</span>
-                      <span className="font-mono text-[10px] opacity-70">{selectedSession.id}</span>
-                    </div>
+              <div className="mb-4 rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 dark:border-slate-700/80 dark:bg-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="line-clamp-2 text-xl font-bold leading-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
+                    {selectedSession.title || text.unnamedSession}
+                  </h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                    <span>{formatLongDate(selectedSession.updatedAt)}</span>
+                    <span className="font-mono text-[10px] opacity-70">{selectedSession.id}</span>
                   </div>
+                </div>
 
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                    {detail?.messages.length ?? 0} {text.messagesCount}
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {text.copyCommand}
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-900 dark:border-slate-700">
+                    <code className="text-xs font-mono text-slate-600 dark:text-slate-300">
+                      opencode --session {selectedSession.id.substring(0, 8)}...
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      disabled={!selectedId}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition"
+                      title={text.copyCommand}
+                    >
+                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
               </div>
