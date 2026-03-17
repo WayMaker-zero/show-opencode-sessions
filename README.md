@@ -1,0 +1,78 @@
+# Show OpenCode Sessions
+
+一个为 [OpenCode](https://github.com/habbylabs/opencode) CLI 用户量身定制的**本地历史会话可视化面板**。
+
+在纯命令行使用 OpenCode 时，由于只有标题，找回几天前的复杂开发上下文往往像大海捞针一样困难。本项目致力于解决这一痛点，通过提供一个简洁大气的 Web 页面，让你一目了然地搜索、预览、找回你的所有 OpenCode 开发历史。
+
+![预览图](https://placehold.co/800x400?text=OpenCode+Sessions+UI) <!-- 建议之后替换为真实的软件截图 -->
+
+## 🌟 核心特性
+
+- **自动侦测**：无需任何配置，自动读取你电脑上 `~/.local/share/opencode` 下的隐藏 SQLite 库和本地 JSON 缓存。
+- **对话气泡预览**：以舒适的左右分栏布局，左侧看列表，右侧沉浸式预览你们的对话过程。
+- **全局搜索**：支持关键字模糊搜索并按时间倒序排列。
+- **一键恢复工作流**：每个会话顶部提供**一键复制命令**（如 `opencode --session <session_id>`），点一下，回到终端粘贴，瞬间恢复当时的开发上下文。
+- **极度安全**：纯本地工具架构，数据绝不上传，一切都在你的电脑上完成。
+
+---
+
+## 🚀 如何使用 (两种方式)
+
+为了让不同技术背景的用户都能顺畅使用，我们提供了两种启动方式。
+
+### 方式一：下载单文件独立版（小白推荐，双击即用）
+
+这是最简单的使用方式，**你不需要懂代码，也不需要安装 Node.js 或者配环境**。
+
+1. 进入当前仓库的 [Releases 页面](#)（发布页面）。
+2. 根据你的操作系统，下载对应的单文件：
+   - 🍏 Mac (M 芯片)：下载 `show-opencode-sessions-macos-arm64`
+   - 🍏 Mac (Intel 芯片)：下载 `show-opencode-sessions-macos-x64`
+   - 🪟 Windows：下载 `show-opencode-sessions-win-x64.exe`
+   - 🐧 Linux：下载 `show-opencode-sessions-linux-x64`
+3. 下载后，直接**双击运行**该文件！
+   > 💡 *提示：如果是 Mac/Linux 用户，首次运行前可能需要在终端中执行 `chmod +x <下载的文件>` 赋予可执行权限。*
+4. 程序会在后台静默启动服务，并**自动打开你的默认浏览器**，直接展示你的历史记录！
+
+---
+
+### 方式二：开发者手动克隆运行 (极客推荐)
+
+如果你是一名前端工程师，想要查看源码或者在本地自行构建：
+
+1. 克隆本仓库到本地：
+   ```bash
+   git clone https://github.com/your-username/show-opencode-sessions.git
+   cd show-opencode-sessions
+   ```
+2. 安装依赖 (推荐 Node.js v18+)：
+   ```bash
+   npm install
+   ```
+3. 启动开发服务器：
+   ```bash
+   npm run dev
+   ```
+   随后打开浏览器访问 `http://localhost:3003` (或者控制台输出的链接)。
+
+4. **如果要自行构建上面提到的“单文件独立版”**：
+   ```bash
+   npm run pkg:build
+   ```
+   构建成功后，所有平台的可执行文件都会被输出到根目录的 `bin/` 文件夹下。
+
+---
+
+## 🛠️ 技术栈与架构揭秘
+
+本项目是一个非常巧妙的**轻量级无后端设计**：
+- **前端 UI**：React 19 + Vite + TailwindCSS 4。
+- **服务端层**：没有笨重的独立后端项目！
+  - **开发环境**：使用 Vite 插件拦截前端向 `/api/opencode/*` 发出的请求，利用 Node.js 中间件直接去硬盘里读 SQLite 和 JSON 碎片。
+  - **生产环境 (双击版)**：使用 `esbuild` 将 Node.js 服务端入口与前端静态资源，利用 `pkg` 打包成一个内嵌 Web 服务器和浏览引擎控制逻辑的独立二进制文件。
+
+如果你对这套架构如何实现感兴趣，请阅读更详细的开发者文档 👉 [Docs/Code_Wiki.md](./Docs/Code_Wiki.md)。
+
+## 📝 License
+
+MIT
