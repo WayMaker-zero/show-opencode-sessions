@@ -6,8 +6,17 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import initSqlJs, { type Database, type SqlJsStatic, type SqlValue } from 'sql.js'
 
-const require = createRequire(import.meta.url)
-const wasmPath = require.resolve('sql.js/dist/sql-wasm.wasm')
+// Try to resolve the Wasm file dynamically to support both Vite dev server and pkg bundled environments
+let wasmPath = ''
+try {
+  // CommonJS / Bundled
+  const _require = typeof require !== 'undefined' ? require : createRequire(import.meta.url)
+  wasmPath = _require.resolve('sql.js/dist/sql-wasm.wasm')
+} catch (e) {
+  // If resolution fails, maybe we are running inside pkg where paths are virtual.
+  // Fallback to absolute virtual path
+  wasmPath = path.join(__dirname, 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm')
+}
 
 type SessionRow = {
   id: string
