@@ -69,7 +69,10 @@ export const t = {
     readError: '读取历史失败。',
     readDetailError: '读取会话详情失败。',
     copyError: '复制失败，请检查剪贴板权限。',
-    bootError: '无法读取本机 opencode 目录。'
+    bootError: '无法读取本机 opencode 目录。',
+    scrollToTop: '回到顶部',
+    prevPrompt: '上一个提示词',
+    nextPrompt: '下一个提示词'
   },
   en: {
     searchPlaceholder: 'Search title or content',
@@ -88,6 +91,9 @@ export const t = {
     readError: 'Failed to read history.',
     readDetailError: 'Failed to read session details.',
     copyError: 'Failed to copy, check clipboard permissions.',
-    bootError: 'Failed to read local opencode directory.'
+    bootError: 'Failed to read local opencode directory.',
+    scrollToTop: 'Scroll to Top',
+    prevPrompt: 'Prev Prompt',
+    nextPrompt: 'Next Prompt'
   }
 }

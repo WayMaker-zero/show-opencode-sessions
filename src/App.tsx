@@ -9,7 +9,10 @@ import {
   Bot,
   Moon,
   Sun,
-  Languages
+  Languages,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpToLine
 } from 'lucide-react'
 import {
   getMeta,
@@ -60,6 +63,7 @@ export default function App() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [copied, setCopied] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const firstSearchEffect = useRef(true)
   const sessionsRef = useRef<SessionListItem[]>([])
 
@@ -203,7 +207,71 @@ export default function App() {
     }
   }
 
+
+
+  const scrollToTop = () => {
+    detailScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const scrollToPrevUserMessage = () => {
+    if (!detailScrollRef.current) return;
+    
+    const userMessages = Array.from(detailScrollRef.current.querySelectorAll('.message-card-user')) as HTMLElement[];
+    const container = detailScrollRef.current;
+    const containerRect = container.getBoundingClientRect();
+
+    // When scrolling down via the "Next" button, we leave a padding of 16px.
+    // This means the "current" prompt sits at `containerRect.top + 16`.
+    // To find the "previous" prompt, we must strictly find the first element (searching from bottom up)
+    // whose top is less than `containerRect.top + 10` to avoid finding the exact same element again.
+    
+    const reversedMessages = [...userMessages].reverse();
+    
+    const targetMessage = reversedMessages.find((el) => {
+      const elRect = el.getBoundingClientRect();
+      return elRect.top < containerRect.top + 10;
+    });
+
+    if (targetMessage) {
+      const distanceToScroll = targetMessage.getBoundingClientRect().top - containerRect.top;
+      container.scrollTo({
+        top: container.scrollTop + distanceToScroll - 16,
+        behavior: 'smooth'
+      });
+    } else {
+      // If no previous user message, just scroll to top
+      scrollToTop();
+    }
+  }
+
+  const scrollToNextUserMessage = () => {
+    if (!detailScrollRef.current) return;
+    
+    const userMessages = Array.from(detailScrollRef.current.querySelectorAll('.message-card-user')) as HTMLElement[];
+    const container = detailScrollRef.current;
+    const containerRect = container.getBoundingClientRect();
+
+    // The element we just scrolled to might be sitting at containerRect.top + 16.
+    // To find the *next* one, we must look for elements whose top is significantly greater than that.
+    const tolerance = 24; // 16px padding + 8px extra buffer
+
+    const targetMessage = userMessages.find((el) => {
+      const elRect = el.getBoundingClientRect();
+      return elRect.top > containerRect.top + tolerance;
+    });
+
+    if (targetMessage) {
+      const distanceToScroll = targetMessage.getBoundingClientRect().top - containerRect.top;
+      
+      container.scrollTo({
+        top: container.scrollTop + distanceToScroll - 16,
+        behavior: 'smooth'
+      });
+    }
+  }
+
   async function handleCopy() {
+
     if (!selectedId) {
       return
     }
@@ -338,7 +406,7 @@ export default function App() {
           </aside>
 
           {/* Main Area: Session Detail */}
-          <section className="animate-rise flex flex-col rounded-3xl border border-slate-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
+          <section className="animate-rise flex flex-col relative rounded-3xl border border-slate-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
             {selectedSession && (
               <div className="mb-4 rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 dark:border-slate-700/80 dark:bg-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="min-w-0">
@@ -373,7 +441,42 @@ export default function App() {
               </div>
             )}
 
-            <div className="session-scroll flex-1 overflow-y-auto pr-2 pb-4">
+
+            {/* Floating Action Buttons placed absolutely relative to the section container */}
+            {!loadingDetail && detail && detail.messages.length > 0 && (
+              <div className="absolute right-6 bottom-6 flex flex-col gap-3 z-10 hidden sm:flex">
+                <button
+                  onClick={scrollToTop}
+                  className="group flex h-10 w-10 items-center justify-center rounded-full bg-white border border-slate-200 shadow-md text-slate-500 hover:text-slate-900 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-700 transition relative"
+                >
+                  <ArrowUpToLine className="h-4 w-4" />
+                  <span className="absolute right-full mr-3 w-max px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 pointer-events-none shadow-sm dark:bg-slate-700 dark:text-slate-200">
+                    {text.scrollToTop || '回到顶部'}
+                  </span>
+                </button>
+                <button
+                  onClick={scrollToPrevUserMessage}
+                  className="group flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white shadow-md hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white transition relative"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                  <span className="absolute right-full mr-3 w-max px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 pointer-events-none shadow-sm dark:bg-slate-700 dark:text-slate-200">
+                    {text.prevPrompt || '上一个提示词'}
+                  </span>
+                </button>
+                <button
+                  onClick={scrollToNextUserMessage}
+                  className="group flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white shadow-md hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white transition relative"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                  <span className="absolute right-full mr-3 w-max px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 pointer-events-none shadow-sm dark:bg-slate-700 dark:text-slate-200">
+                    {text.nextPrompt || '下一个提示词'}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            <div ref={detailScrollRef} className="session-scroll flex-1 overflow-y-auto pr-2 pb-4">
+
               {loadingDetail ? (
                 <div className="flex min-h-[320px] items-center justify-center text-slate-500">
                   <LoaderCircle className="h-5 w-5 animate-spin" />
