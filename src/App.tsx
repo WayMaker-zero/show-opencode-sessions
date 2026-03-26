@@ -24,6 +24,8 @@ import {
 import { useThemeLang, t } from './lib/theme-lang'
 import { MessagePartView } from './components/MessagePartView'
 
+const SESSION_WINDOW_SIZE = 300
+
 function formatShortDate(value: number) {
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit',
@@ -61,26 +63,41 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<SessionDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingMoreDetail, setLoadingMoreDetail] = useState(false)
+  const [detailNextCursor, setDetailNextCursor] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const listRef = useRef<HTMLDivElement | null>(null)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const firstSearchEffect = useRef(true)
   const sessionsRef = useRef<SessionListItem[]>([])
+  const sessionBaseOffsetRef = useRef(0)
+  const listRequestAbortRef = useRef<AbortController | null>(null)
+  const detailRequestAbortRef = useRef<AbortController | null>(null)
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedId) ?? null,
     [sessions, selectedId],
   )
 
-  const hasMore = sessions.length < total
+  const hasMore = sessionBaseOffsetRef.current + sessions.length < total
 
   useEffect(() => {
     sessionsRef.current = sessions
   }, [sessions])
 
   async function loadSessionPage(reset: boolean) {
-    const nextOffset = reset ? 0 : sessionsRef.current.length
+    if (reset) {
+      sessionBaseOffsetRef.current = 0
+    }
+
+    const nextOffset = reset
+      ? 0
+      : sessionBaseOffsetRef.current + sessionsRef.current.length
     const nextLimit = search.trim() ? 20 : reset ? 10 : 20
+
+    listRequestAbortRef.current?.abort()
+    const controller = new AbortController()
+    listRequestAbortRef.current = controller
 
     if (reset) {
       setLoadingList(true)
@@ -94,12 +111,26 @@ export default function App() {
         query: search.trim(),
         offset: nextOffset,
         limit: nextLimit,
+        signal: controller.signal,
       })
 
+      if (controller.signal.aborted) {
+        return
+      }
+
       setTotal(result.total)
-      setSessions((current) => (reset ? result.items : [...current, ...result.items]))
+
+      let merged = reset ? result.items : [...sessionsRef.current, ...result.items]
+      if (merged.length > SESSION_WINDOW_SIZE) {
+        const trimmed = merged.length - SESSION_WINDOW_SIZE
+        merged = merged.slice(trimmed)
+        sessionBaseOffsetRef.current += trimmed
+      }
+
+      sessionsRef.current = merged
+      setSessions(merged)
       setSelectedId((current) => {
-        const source = reset ? result.items : [...sessionsRef.current, ...result.items]
+        const source = merged
 
         if (current && source.some((item) => item.id === current)) {
           return current
@@ -108,20 +139,30 @@ export default function App() {
         return source[0]?.id ?? null
       })
     } catch (err) {
+      if (controller.signal.aborted) {
+        return
+      }
       setError(err instanceof Error ? err.message : text.readError)
     } finally {
-      setLoadingList(false)
-      setLoadingMore(false)
-      setBooting(false)
+      if (!controller.signal.aborted) {
+        setLoadingList(false)
+        setLoadingMore(false)
+        setBooting(false)
+      }
+
+      if (listRequestAbortRef.current === controller) {
+        listRequestAbortRef.current = null
+      }
     }
   }
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
 
     async function boot() {
       try {
-        await getMeta()
+        await getMeta(controller.signal)
         if (!cancelled) {
           await loadSessionPage(true)
         }
@@ -137,6 +178,8 @@ export default function App() {
 
     return () => {
       cancelled = true
+      controller.abort()
+      listRequestAbortRef.current?.abort()
     }
   }, [])
 
@@ -147,6 +190,8 @@ export default function App() {
     }
 
     const timer = window.setTimeout(() => {
+      sessionBaseOffsetRef.current = 0
+      sessionsRef.current = []
       setSessions([])
       setTotal(0)
       void loadSessionPage(true)
@@ -158,33 +203,91 @@ export default function App() {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null)
+      setDetailNextCursor(null)
+      detailRequestAbortRef.current?.abort()
       return
     }
 
-    let cancelled = false
     setLoadingDetail(true)
+    setLoadingMoreDetail(false)
+    detailRequestAbortRef.current?.abort()
+    const controller = new AbortController()
+    detailRequestAbortRef.current = controller
 
-    void getSessionDetail(selectedId)
+    void getSessionDetail(selectedId, { cursor: 0, limit: 60, lite: true, signal: controller.signal })
       .then((result) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setDetail(result)
+          setDetailNextCursor(result.nextCursor)
         }
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : text.readDetailError)
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setLoadingDetail(false)
+        }
+
+        if (detailRequestAbortRef.current === controller) {
+          detailRequestAbortRef.current = null
         }
       })
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [selectedId])
+
+  async function handleLoadMoreDetail() {
+    if (!selectedId || detailNextCursor === null || loadingMoreDetail || loadingDetail) {
+      return
+    }
+
+    detailRequestAbortRef.current?.abort()
+    const controller = new AbortController()
+    detailRequestAbortRef.current = controller
+    setLoadingMoreDetail(true)
+
+    try {
+      const result = await getSessionDetail(selectedId, {
+        cursor: detailNextCursor,
+        limit: 60,
+        lite: true,
+        signal: controller.signal,
+      })
+
+      if (controller.signal.aborted) {
+        return
+      }
+
+      setDetail((current) => {
+        if (!current) {
+          return result
+        }
+
+        return {
+          ...result,
+          messages: [...current.messages, ...result.messages],
+        }
+      })
+      setDetailNextCursor(result.nextCursor)
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : text.readDetailError)
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setLoadingMoreDetail(false)
+      }
+
+      if (detailRequestAbortRef.current === controller) {
+        detailRequestAbortRef.current = null
+      }
+    }
+  }
 
   useEffect(() => {
     if (!copied) {
@@ -518,7 +621,7 @@ export default function App() {
                         <div className="space-y-1">
                           {message.parts && message.parts.length > 0 ? (
                             message.parts.map((part, idx) => (
-                              <MessagePartView key={part.id || idx} part={part} />
+                              <MessagePartView key={part.id || idx} sessionId={selectedId} part={part} />
                             ))
                           ) : (
                             <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
@@ -529,6 +632,18 @@ export default function App() {
                       </article>
                     )
                   })}
+                  {detailNextCursor !== null && (
+                    <div className="flex justify-center pt-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadMoreDetail}
+                        disabled={loadingMoreDetail}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        {loadingMoreDetail ? text.updating : `${text.loadMore} (${detail.messages.length}/${detail.totalMessages})`}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
 

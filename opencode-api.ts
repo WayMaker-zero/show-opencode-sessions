@@ -62,6 +62,7 @@ export type SessionListItem = {
 
 export type SessionMessagePart = {
   id: string
+  messageId?: string
   type: string
   text?: string
   tool?: string
@@ -70,6 +71,7 @@ export type SessionMessagePart = {
   files?: string[]
   filename?: string
   data?: any
+  hasDetail?: boolean
 }
 
 export type SessionMessage = {
@@ -84,6 +86,10 @@ export type SessionMessage = {
 export type SessionDetail = {
   session: SessionListItem
   messages: SessionMessage[]
+  totalMessages: number
+  cursor: number
+  nextCursor: number | null
+  limit: number
 }
 
 let sqlJsPromise: Promise<SqlJsStatic> | null = null
@@ -126,12 +132,13 @@ async function openDatabase() {
 function getRows<T extends Record<string, unknown>>(db: Database, sql: string, params: SqlValue[] = []) {
   const statement = db.prepare(sql, params)
   const rows: T[] = []
-
-  while (statement.step()) {
-    rows.push(statement.getAsObject() as T)
+  try {
+    while (statement.step()) {
+      rows.push(statement.getAsObject() as T)
+    }
+  } finally {
+    statement.free()
   }
-
-  statement.free()
   return rows
 }
 
@@ -324,10 +331,54 @@ function partToText(data: string) {
   return ''
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+type SessionDetailOptions = {
+  cursor?: number
+  limit?: number
+  lite?: boolean
+}
+
+function toSessionMessagePart(part: PartRow, lite: boolean): SessionMessagePart {
+  const payload = safeParse<any>(part.data) || {}
+  const type = typeof payload.type === 'string' ? payload.type : 'unknown'
+
+  if (!lite) {
+    return {
+      id: part.id,
+      messageId: part.message_id,
+      type,
+      text: payload.text,
+      tool: payload.tool,
+      input: payload.state?.input,
+      output: payload.state?.output,
+      files: payload.files,
+      filename: payload.filename,
+      data: payload,
+      hasDetail: false,
+    }
+  }
+
+  return {
+    id: part.id,
+    messageId: part.message_id,
+    type,
+    text: typeof payload.text === 'string' ? payload.text : undefined,
+    tool: typeof payload.tool === 'string' ? payload.tool : undefined,
+    files: Array.isArray(payload.files) ? payload.files.filter((item: unknown): item is string => typeof item === 'string') : undefined,
+    filename: typeof payload.filename === 'string' ? payload.filename : undefined,
+    hasDetail: type === 'tool' || type === 'patch' || type === 'file' || type === 'step-start' || type === 'step-finish',
+  }
+}
+
+export async function getSessionDetail(sessionId: string, options: SessionDetailOptions = {}): Promise<SessionDetail> {
   const { db } = await openDatabase()
 
   try {
+    const rawCursor = Number.isFinite(options.cursor) ? Number(options.cursor) : 0
+    const rawLimit = Number.isFinite(options.limit) ? Number(options.limit) : 60
+    const cursor = Math.max(0, rawCursor)
+    const limit = Math.min(100, Math.max(1, rawLimit))
+    const lite = options.lite ?? true
+
     const sessionRow = getRows<SessionRow>(
       db,
       `
@@ -355,6 +406,16 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
 
     const session = enrichSessions(db, [sessionRow])[0]
 
+    const totalMessages = getScalarNumber(
+      db,
+      `
+        SELECT COUNT(*) AS value
+        FROM message
+        WHERE session_id = ?
+      `,
+      [sessionId],
+    )
+
     const messageRows = getRows<MessageRow>(
       db,
       `
@@ -362,20 +423,28 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
         FROM message
         WHERE session_id = ?
         ORDER BY time_created ASC, id ASC
+        LIMIT ? OFFSET ?
       `,
-      [sessionId],
+      [sessionId, limit, cursor],
     )
 
-    const partRows = getRows<PartRow>(
-      db,
-      `
-        SELECT id, message_id, time_created, data
-        FROM part
-        WHERE session_id = ?
-        ORDER BY time_created ASC, id ASC
-      `,
-      [sessionId],
-    )
+    const messageIds = messageRows.map((row) => row.id)
+    let partRows: PartRow[] = []
+
+    if (messageIds.length > 0) {
+      const placeholders = messageIds.map(() => '?').join(', ')
+      partRows = getRows<PartRow>(
+        db,
+        `
+          SELECT id, message_id, time_created, data
+          FROM part
+          WHERE session_id = ?
+            AND message_id IN (${placeholders})
+          ORDER BY time_created ASC, id ASC
+        `,
+        [sessionId, ...messageIds],
+      )
+    }
 
     const groupedParts = new Map<string, PartRow[]>()
     for (const row of partRows) {
@@ -398,20 +467,7 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
         }>(row.data)
 
         const rawParts = groupedParts.get(row.id) ?? []
-        const parsedParts = rawParts.map(part => {
-          let payload = safeParse<any>(part.data) || {}
-          return {
-            id: part.id,
-            type: payload.type || 'unknown',
-            text: payload.text,
-            tool: payload.tool,
-            input: payload.state?.input,
-            output: payload.state?.output,
-            files: payload.files,
-            filename: payload.filename,
-            data: payload
-          } as SessionMessagePart
-        })
+        const parsedParts = rawParts.map((part) => toSessionMessagePart(part, lite))
         const parts = rawParts.map((part) => partToText(part.data)).filter(Boolean)
         const text = parts.join('\n\n').trim()
         const provider = meta?.providerID ?? meta?.model?.providerID
@@ -423,12 +479,46 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
           createdAt: meta?.time?.created ?? row.time_created,
           modelLabel: [provider, model].filter(Boolean).join(' / ') || undefined,
           text,
-          parts: parsedParts
+          parts: parsedParts,
         } satisfies SessionMessage
       })
       .filter((message) => message.text || message.parts.length > 0)
 
-    return { session, messages }
+    const nextCursor = cursor + messageRows.length < totalMessages ? cursor + messageRows.length : null
+
+    return {
+      session,
+      messages,
+      totalMessages,
+      cursor,
+      nextCursor,
+      limit,
+    }
+  } finally {
+    db.close()
+  }
+}
+
+export async function getSessionPartDetail(sessionId: string, partId: string): Promise<SessionMessagePart> {
+  const { db } = await openDatabase()
+
+  try {
+    const row = getRows<PartRow>(
+      db,
+      `
+        SELECT id, message_id, time_created, data
+        FROM part
+        WHERE session_id = ? AND id = ?
+        LIMIT 1
+      `,
+      [sessionId, partId],
+    )[0]
+
+    if (!row) {
+      throw new Error('消息片段不存在。')
+    }
+
+    return toSessionMessagePart(row, false)
   } finally {
     db.close()
   }
@@ -459,9 +549,9 @@ async function handleSessions(url: URL, res: ServerResponse) {
   sendJson(res, 200, result)
 }
 
-async function handleSessionDetail(sessionId: string, res: ServerResponse) {
-  const result = await getSessionDetail(sessionId)
-  sendJson(res, 200, result)
+async function handleSessionPartDetail(sessionId: string, partId: string, res: ServerResponse) {
+  const result = await getSessionPartDetail(sessionId, partId)
+  sendJson(res, 200, { part: result })
 }
 
 export async function handleOpencodeApi(req: IncomingMessage, res: ServerResponse) {
@@ -479,9 +569,30 @@ export async function handleOpencodeApi(req: IncomingMessage, res: ServerRespons
       return
     }
 
+    if (url.pathname.includes('/parts/')) {
+      const sessionPrefix = '/api/opencode/sessions/'
+      const partMarker = '/parts/'
+      const partMarkerIndex = url.pathname.indexOf(partMarker)
+
+      if (url.pathname.startsWith(sessionPrefix) && partMarkerIndex > sessionPrefix.length) {
+        const sessionId = decodeURIComponent(url.pathname.slice(sessionPrefix.length, partMarkerIndex))
+        const partId = decodeURIComponent(url.pathname.slice(partMarkerIndex + partMarker.length))
+
+        if (sessionId && partId) {
+          await handleSessionPartDetail(sessionId, partId, res)
+          return
+        }
+      }
+    }
+
     if (url.pathname.startsWith('/api/opencode/sessions/')) {
       const sessionId = decodeURIComponent(url.pathname.slice('/api/opencode/sessions/'.length))
-      await handleSessionDetail(sessionId, res)
+      const cursor = Number(url.searchParams.get('cursor') ?? '0')
+      const limit = Number(url.searchParams.get('limit') ?? '60')
+      const liteParam = (url.searchParams.get('lite') ?? '1').toLowerCase()
+      const lite = liteParam !== '0' && liteParam !== 'false'
+      const result = await getSessionDetail(sessionId, { cursor, limit, lite })
+      sendJson(res, 200, result)
       return
     }
 
