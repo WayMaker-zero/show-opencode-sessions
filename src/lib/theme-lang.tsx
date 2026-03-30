@@ -72,7 +72,11 @@ export const t = {
     bootError: '无法读取本机 opencode 目录。',
     scrollToTop: '回到顶部',
     prevPrompt: '上一个提示词',
-    nextPrompt: '下一个提示词'
+    nextPrompt: '下一个提示词',
+    importSession: '导入会话',
+    exportSession: '导出会话',
+    importedTag: '导入会话',
+    importedReadonly: '导入会话仅支持查看，不提供恢复命令。'
   },
   en: {
     searchPlaceholder: 'Search title or content',
@@ -94,6 +98,10 @@ export const t = {
     bootError: 'Failed to read local opencode directory.',
     scrollToTop: 'Scroll to Top',
     prevPrompt: 'Prev Prompt',
-    nextPrompt: 'Next Prompt'
+    nextPrompt: 'Next Prompt',
+    importSession: 'Import Session',
+    exportSession: 'Export Session',
+    importedTag: 'Imported',
+    importedReadonly: 'Imported sessions are view-only and have no restore command.'
   }
 }
