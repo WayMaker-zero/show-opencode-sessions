@@ -92,6 +92,16 @@ export type SessionDetail = {
   limit: number
 }
 
+export type ExportedSessionFile = {
+  format: 'show-opencode-session-export-v1'
+  exportedAt: number
+  source: 'opencode-local'
+  sourceSessionId: string
+  session: SessionListItem
+  messages: SessionMessage[]
+  totalMessages: number
+}
+
 let sqlJsPromise: Promise<SqlJsStatic> | null = null
 
 function getSqlJs() {
@@ -524,6 +534,47 @@ export async function getSessionPartDetail(sessionId: string, partId: string): P
   }
 }
 
+export async function exportSessionFile(sessionId: string): Promise<ExportedSessionFile> {
+  const mergedMessages: SessionMessage[] = []
+  let cursor = 0
+  let nextCursor: number | null = 0
+  let session: SessionListItem | null = null
+  let totalMessages = 0
+
+  while (nextCursor !== null) {
+    const detail = await getSessionDetail(sessionId, { cursor, limit: 100, lite: false })
+
+    if (!session) {
+      session = detail.session
+    }
+
+    totalMessages = detail.totalMessages
+    mergedMessages.push(...detail.messages)
+    nextCursor = detail.nextCursor
+
+    if (nextCursor !== null) {
+      if (nextCursor <= cursor) {
+        throw new Error('会话导出失败：分页游标异常。')
+      }
+      cursor = nextCursor
+    }
+  }
+
+  if (!session) {
+    throw new Error('会话导出失败：会话不存在。')
+  }
+
+  return {
+    format: 'show-opencode-session-export-v1',
+    exportedAt: Date.now(),
+    source: 'opencode-local',
+    sourceSessionId: session.id,
+    session,
+    messages: mergedMessages,
+    totalMessages,
+  }
+}
+
 function sendJson(res: ServerResponse, statusCode: number, data: unknown) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -552,6 +603,11 @@ async function handleSessions(url: URL, res: ServerResponse) {
 async function handleSessionPartDetail(sessionId: string, partId: string, res: ServerResponse) {
   const result = await getSessionPartDetail(sessionId, partId)
   sendJson(res, 200, { part: result })
+}
+
+async function handleSessionExport(sessionId: string, res: ServerResponse) {
+  const result = await exportSessionFile(sessionId)
+  sendJson(res, 200, result)
 }
 
 export async function handleOpencodeApi(req: IncomingMessage, res: ServerResponse) {
@@ -583,6 +639,20 @@ export async function handleOpencodeApi(req: IncomingMessage, res: ServerRespons
           return
         }
       }
+    }
+
+    if (url.pathname.endsWith('/export') && url.pathname.startsWith('/api/opencode/sessions/')) {
+      const prefix = '/api/opencode/sessions/'
+      const rawSessionId = url.pathname.slice(prefix.length, -'/export'.length)
+      const sessionId = decodeURIComponent(rawSessionId)
+
+      if (!sessionId) {
+        sendJson(res, 400, { message: '无效的会话 ID。' })
+        return
+      }
+
+      await handleSessionExport(sessionId, res)
+      return
     }
 
     if (url.pathname.startsWith('/api/opencode/sessions/')) {

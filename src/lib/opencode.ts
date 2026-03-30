@@ -6,6 +6,9 @@ export type SessionListItem = {
   version: string
   createdAt: number
   updatedAt: number
+  isImported?: boolean
+  sourceSessionId?: string
+  restoreCommandAvailable?: boolean
   summary: {
     additions: number
     deletions: number
@@ -44,11 +47,22 @@ export type SessionDetail = {
   cursor: number
   nextCursor: number | null
   limit: number
+  restoreCommandAvailable?: boolean
 }
 
 export type SessionListResponse = {
   items: SessionListItem[]
   total: number
+}
+
+export type ExportedSessionFile = {
+  format: 'show-opencode-session-export-v1'
+  exportedAt: number
+  source: 'opencode-local' | 'imported-file'
+  sourceSessionId: string
+  session: SessionListItem
+  messages: SessionMessage[]
+  totalMessages: number
 }
 
 async function readJson<T>(input: string, signal?: AbortSignal) {
@@ -97,6 +111,13 @@ export function getSessionDetail(
 export function getSessionPartDetail(sessionId: string, partId: string, signal?: AbortSignal) {
   return readJson<{ part: SessionMessagePart }>(
     `/api/opencode/sessions/${encodeURIComponent(sessionId)}/parts/${encodeURIComponent(partId)}`,
+    signal,
+  )
+}
+
+export function exportSessionFile(sessionId: string, signal?: AbortSignal) {
+  return readJson<ExportedSessionFile>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/export`,
     signal,
   )
 }

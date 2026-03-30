@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
   AlertCircle,
   Check,
   Copy,
+  Download,
   LoaderCircle,
   Search,
+  Upload,
   User,
   Bot,
   Moon,
@@ -15,16 +17,20 @@ import {
   ArrowUpToLine
 } from 'lucide-react'
 import {
+  exportSessionFile,
   getMeta,
   getSessionDetail,
   getSessions,
+  type ExportedSessionFile,
   type SessionDetail,
   type SessionListItem,
+  type SessionMessage,
 } from './lib/opencode'
 import { useThemeLang, t } from './lib/theme-lang'
 import { MessagePartView } from './components/MessagePartView'
 
 const SESSION_WINDOW_SIZE = 300
+const IMPORTED_SESSION_PREFIX = 'imported:'
 
 function formatShortDate(value: number) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -49,6 +55,41 @@ function formatCommand(sessionId: string) {
   return `opencode --session ${sessionId}`
 }
 
+type ImportedSessionRecord = {
+  session: SessionListItem
+  detail: SessionDetail
+  searchText: string
+}
+
+function isImportedSessionId(sessionId: string | null) {
+  return typeof sessionId === 'string' && sessionId.startsWith(IMPORTED_SESSION_PREFIX)
+}
+
+function buildSearchText(session: SessionListItem, messages: SessionMessage[]) {
+  const pieces = [session.title, session.preview, ...messages.map((message) => message.text)]
+  return pieces
+    .filter((piece): piece is string => typeof piece === 'string' && piece.trim().length > 0)
+    .join(' ')
+    .toLowerCase()
+}
+
+function createFileName(session: SessionListItem) {
+  const title = (session.title || 'session').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]+/g, '-').replace(/-+/g, '-').slice(0, 40)
+  return `opencode-session-${title || 'session'}-${session.id.slice(0, 8)}.json`
+}
+
+function triggerDownload(fileName: string, content: string) {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 export default function App() {
   const { theme, setTheme, lang, setLang } = useThemeLang()
   const text = t[lang]
@@ -66,24 +107,54 @@ export default function App() {
   const [loadingMoreDetail, setLoadingMoreDetail] = useState(false)
   const [detailNextCursor, setDetailNextCursor] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importedSessions, setImportedSessions] = useState<ImportedSessionRecord[]>([])
   const listRef = useRef<HTMLDivElement | null>(null)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const firstSearchEffect = useRef(true)
   const sessionsRef = useRef<SessionListItem[]>([])
+  const importedIdsRef = useRef<Set<string>>(new Set())
   const sessionBaseOffsetRef = useRef(0)
   const listRequestAbortRef = useRef<AbortController | null>(null)
   const detailRequestAbortRef = useRef<AbortController | null>(null)
 
+  const filteredImportedSessions = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    const source = query
+      ? importedSessions.filter((record) => record.searchText.includes(query))
+      : importedSessions
+
+    return [...source]
+      .sort((a, b) => b.session.updatedAt - a.session.updatedAt)
+      .map((record) => record.session)
+  }, [importedSessions, search])
+
+  const displayedSessions = useMemo(
+    () => [...filteredImportedSessions, ...sessions],
+    [filteredImportedSessions, sessions],
+  )
+
   const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedId) ?? null,
-    [sessions, selectedId],
+    () => displayedSessions.find((session) => session.id === selectedId) ?? null,
+    [displayedSessions, selectedId],
+  )
+
+  const selectedImportedRecord = useMemo(
+    () => importedSessions.find((record) => record.session.id === selectedId) ?? null,
+    [importedSessions, selectedId],
   )
 
   const hasMore = sessionBaseOffsetRef.current + sessions.length < total
+  const displayTotal = total + filteredImportedSessions.length
 
   useEffect(() => {
     sessionsRef.current = sessions
   }, [sessions])
+
+  useEffect(() => {
+    importedIdsRef.current = new Set(importedSessions.map((record) => record.session.id))
+  }, [importedSessions])
 
   async function loadSessionPage(reset: boolean) {
     if (reset) {
@@ -132,11 +203,11 @@ export default function App() {
       setSelectedId((current) => {
         const source = merged
 
-        if (current && source.some((item) => item.id === current)) {
+        if (current && (source.some((item) => item.id === current) || importedIdsRef.current.has(current))) {
           return current
         }
 
-        return source[0]?.id ?? null
+        return importedSessions[0]?.session.id ?? source[0]?.id ?? null
       })
     } catch (err) {
       if (controller.signal.aborted) {
@@ -208,6 +279,17 @@ export default function App() {
       return
     }
 
+    if (isImportedSessionId(selectedId)) {
+      detailRequestAbortRef.current?.abort()
+      const imported = importedSessions.find((record) => record.session.id === selectedId)
+
+      setLoadingDetail(false)
+      setLoadingMoreDetail(false)
+      setDetail(imported?.detail ?? null)
+      setDetailNextCursor(null)
+      return
+    }
+
     setLoadingDetail(true)
     setLoadingMoreDetail(false)
     detailRequestAbortRef.current?.abort()
@@ -239,7 +321,7 @@ export default function App() {
     return () => {
       controller.abort()
     }
-  }, [selectedId])
+  }, [selectedId, importedSessions])
 
   async function handleLoadMoreDetail() {
     if (!selectedId || detailNextCursor === null || loadingMoreDetail || loadingDetail) {
@@ -414,6 +496,107 @@ export default function App() {
     }
   }
 
+  async function handleExportSession() {
+    if (!selectedSession || exporting) {
+      return
+    }
+
+    setExporting(true)
+
+    try {
+      let payload: ExportedSessionFile
+
+      if (selectedImportedRecord && detail) {
+        payload = {
+          format: 'show-opencode-session-export-v1',
+          exportedAt: Date.now(),
+          source: 'imported-file',
+          sourceSessionId: selectedImportedRecord.session.sourceSessionId || selectedImportedRecord.session.id,
+          session: selectedImportedRecord.session,
+          messages: detail.messages,
+          totalMessages: detail.totalMessages,
+        }
+      } else {
+        payload = await exportSessionFile(selectedSession.id)
+      }
+
+      triggerDownload(createFileName(selectedSession), JSON.stringify(payload, null, 2))
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text.readDetailError)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  function handleOpenImport() {
+    importInputRef.current?.click()
+  }
+
+  function toImportedRecord(payload: ExportedSessionFile): ImportedSessionRecord {
+    if (!payload || payload.format !== 'show-opencode-session-export-v1') {
+      throw new Error(lang === 'zh' ? '不是有效的会话导出文件。' : 'Invalid session export file.')
+    }
+
+    if (!payload.session || !Array.isArray(payload.messages)) {
+      throw new Error(lang === 'zh' ? '导入文件缺少必要字段。' : 'The import file is missing required fields.')
+    }
+
+    const importedId = `${IMPORTED_SESSION_PREFIX}${crypto.randomUUID()}`
+    const sessionTitle = payload.session.title || text.unnamedSession
+    const preview = payload.session.preview || payload.messages.map((message) => message.text).find(Boolean) || ''
+    const session: SessionListItem = {
+      ...payload.session,
+      id: importedId,
+      title: sessionTitle,
+      preview,
+      isImported: true,
+      sourceSessionId: payload.sourceSessionId || payload.session.id,
+      restoreCommandAvailable: false,
+      updatedAt: payload.session.updatedAt || Date.now(),
+      createdAt: payload.session.createdAt || Date.now(),
+    }
+
+    const detailData: SessionDetail = {
+      session,
+      messages: payload.messages,
+      totalMessages: payload.totalMessages || payload.messages.length,
+      cursor: 0,
+      nextCursor: null,
+      limit: payload.messages.length || 1,
+      restoreCommandAvailable: false,
+    }
+
+    return {
+      session,
+      detail: detailData,
+      searchText: buildSearchText(session, payload.messages),
+    }
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ''
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const content = await file.text()
+      const payload = JSON.parse(content) as ExportedSessionFile
+      const imported = toImportedRecord(payload)
+
+      setImportedSessions((current) => [imported, ...current])
+      setSelectedId(imported.session.id)
+      setDetail(imported.detail)
+      setDetailNextCursor(null)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text.readDetailError)
+    }
+  }
+
   return (
     <div className="min-h-screen text-slate-900 dark:text-slate-200">
       <div className="mx-auto flex h-screen max-w-[1500px] flex-col px-4 py-4 sm:px-6 lg:px-8">
@@ -432,6 +615,16 @@ export default function App() {
 
           <button
             type="button"
+            onClick={handleOpenImport}
+            className="flex h-11 items-center gap-2 rounded-2xl bg-white/80 border border-slate-200 px-3 text-slate-600 transition hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            title={text.importSession}
+          >
+            <Upload className="h-4 w-4" />
+            <span className="hidden text-xs sm:inline">{text.importSession}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
             className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/80 border border-slate-200 text-slate-600 transition hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
             title="Toggle Language"
@@ -447,6 +640,14 @@ export default function App() {
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
+
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
         </div>
 
         {error && (
@@ -462,8 +663,8 @@ export default function App() {
           {/* Sidebar: Session List */}
           <aside className="animate-rise flex flex-col rounded-3xl border border-slate-200/60 bg-white/60 p-3 shadow-sm backdrop-blur-xl sm:p-4 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
             <div className="mb-3 flex items-center justify-between px-2 text-xs text-slate-500 dark:text-slate-400">
-              <span>{search.trim() ? `${text.found} ${total} ${text.items}` : text.recentSessions}</span>
-              <span>{loadingList ? text.updating : `${sessions.length}/${total || sessions.length}`}</span>
+              <span>{search.trim() ? `${text.found} ${displayTotal} ${text.items}` : text.recentSessions}</span>
+              <span>{loadingList ? text.updating : `${displayedSessions.length}/${displayTotal || displayedSessions.length}`}</span>
             </div>
 
             <div ref={listRef} onScroll={handleListScroll} className="session-scroll flex-1 space-y-3 overflow-y-auto pr-2 pb-4">
@@ -473,13 +674,13 @@ export default function App() {
                 ))
               ) : null}
 
-              {!booting && !loadingList && !sessions.length ? (
+              {!booting && !loadingList && !displayedSessions.length ? (
                 <div className="flex min-h-[220px] items-center justify-center rounded-[22px] border border-dashed border-slate-300 bg-white/50 px-6 text-center text-sm leading-7 text-slate-500 dark:border-slate-700 dark:bg-slate-800/30">
                   {text.noSessionFound}
                 </div>
               ) : null}
 
-              {sessions.map((session) => {
+              {displayedSessions.map((session) => {
                 const selected = session.id === selectedId
 
                 return (
@@ -495,6 +696,9 @@ export default function App() {
                       </h2>
                       <span className="shrink-0 text-[10px] opacity-70 mt-1">{formatShortDate(session.updatedAt)}</span>
                     </div>
+                    {session.isImported && (
+                      <div className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">{text.importedTag}</div>
+                    )}
                     <p className="mt-2 line-clamp-2 text-xs leading-relaxed opacity-80">
                       {session.preview || text.noPreview}
                     </p>
@@ -519,27 +723,50 @@ export default function App() {
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                     <span>{formatLongDate(selectedSession.updatedAt)}</span>
                     <span className="font-mono text-[10px] opacity-70">{selectedSession.id}</span>
+                    {selectedSession.isImported && (
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                        {text.importedTag}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    {text.copyCommand}
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-900 dark:border-slate-700">
-                    <code className="text-xs font-mono text-slate-600 dark:text-slate-300">
-                      opencode --session {selectedSession.id.substring(0, 8)}...
-                    </code>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={handleCopy}
-                      disabled={!selectedId}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition"
-                      title={text.copyCommand}
+                      onClick={handleExportSession}
+                      disabled={exporting || !selectedSession}
+                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {exporting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      <span>{text.exportSession}</span>
                     </button>
                   </div>
+
+                  {!selectedSession.isImported ? (
+                    <>
+                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        {text.copyCommand}
+                      </div>
+                      <div className="flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-900 dark:border-slate-700">
+                        <code className="text-xs font-mono text-slate-600 dark:text-slate-300">
+                          opencode --session {selectedSession.id.substring(0, 8)}...
+                        </code>
+                        <button
+                          type="button"
+                          onClick={handleCopy}
+                          disabled={!selectedId}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition"
+                          title={text.copyCommand}
+                        >
+                          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{text.importedReadonly}</div>
+                  )}
                 </div>
               </div>
             )}
