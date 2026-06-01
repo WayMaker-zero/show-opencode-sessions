@@ -14,7 +14,10 @@ import {
   Languages,
   ArrowDown,
   ArrowUp,
-  ArrowUpToLine
+  ArrowUpToLine,
+  Folder,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import {
   exportSessionFile,
@@ -26,7 +29,7 @@ import {
   type SessionListItem,
   type SessionMessage,
 } from './lib/opencode'
-import { useThemeLang, t } from './lib/theme-lang'
+import { useThemeLang, t, HighlightText } from './lib/theme-lang'
 import { MessagePartView } from './components/MessagePartView'
 
 const SESSION_WINDOW_SIZE = 300
@@ -90,6 +93,19 @@ function triggerDownload(fileName: string, content: string) {
   URL.revokeObjectURL(url)
 }
 
+function countOccurrences(str: string, search: string): number {
+  if (!search || !str) return 0
+  const cleanStr = str.toLowerCase()
+  const cleanSearch = search.toLowerCase()
+  let count = 0
+  let pos = cleanStr.indexOf(cleanSearch)
+  while (pos !== -1) {
+    count++
+    pos = cleanStr.indexOf(cleanSearch, pos + cleanSearch.length)
+  }
+  return count
+}
+
 export default function App() {
   const { theme, setTheme, lang, setLang } = useThemeLang()
   const text = t[lang]
@@ -109,6 +125,8 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importedSessions, setImportedSessions] = useState<ImportedSessionRecord[]>([])
+  const [matchCount, setMatchCount] = useState(0)
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
   const listRef = useRef<HTMLDivElement | null>(null)
   const detailScrollRef = useRef<HTMLDivElement | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -118,6 +136,7 @@ export default function App() {
   const sessionBaseOffsetRef = useRef(0)
   const listRequestAbortRef = useRef<AbortController | null>(null)
   const detailRequestAbortRef = useRef<AbortController | null>(null)
+  const pendingMatchFocusRef = useRef<'first' | 'last' | null>(null)
 
   const filteredImportedSessions = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -127,7 +146,15 @@ export default function App() {
 
     return [...source]
       .sort((a, b) => b.session.updatedAt - a.session.updatedAt)
-      .map((record) => record.session)
+      .map((record) => {
+        const session = { ...record.session }
+        if (query) {
+          session.matchCount = countOccurrences(record.searchText, query)
+        } else {
+          session.matchCount = undefined
+        }
+        return session
+      })
   }, [importedSessions, search])
 
   const displayedSessions = useMemo(
@@ -202,6 +229,13 @@ export default function App() {
       setSessions(merged)
       setSelectedId((current) => {
         const source = merged
+
+        // If it's a new search (reset is true) and we have a search query, always select the first matching session
+        if (reset && search.trim()) {
+          const firstImported = filteredImportedSessions[0]?.id
+          const firstSource = source[0]?.id
+          return firstImported ?? firstSource ?? null
+        }
 
         if (current && (source.some((item) => item.id === current) || importedIdsRef.current.has(current))) {
           return current
@@ -455,6 +489,121 @@ export default function App() {
     }
   }
 
+  // Navigate through highlighted search matches (with cross-session walkthrough)
+  const navigateMatch = (direction: 'next' | 'prev') => {
+    if (!search.trim() || displayedSessions.length === 0) return
+
+    const currentSessionIdx = displayedSessions.findIndex((s) => s.id === selectedId)
+    if (currentSessionIdx === -1) return
+
+    const matches = detailScrollRef.current?.querySelectorAll('[data-search-match="true"]') || []
+    const count = matches.length
+
+    if (direction === 'next') {
+      if (count > 0 && currentMatchIndex < count - 1) {
+        // Within current session, go to next
+        const nextIdx = currentMatchIndex + 1
+        setCurrentMatchIndex(nextIdx)
+        matches.forEach((el, idx) => {
+          if (idx === nextIdx) {
+            el.classList.add('search-match-active')
+            ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
+          } else {
+            el.classList.remove('search-match-active')
+          }
+        })
+      } else {
+        // No matches left in this session, jump to next session
+        const nextSessionIdx = (currentSessionIdx + 1) % displayedSessions.length
+        pendingMatchFocusRef.current = 'first'
+        setSelectedId(displayedSessions[nextSessionIdx].id)
+      }
+    } else {
+      // direction === 'prev'
+      if (count > 0 && currentMatchIndex > 0) {
+        // Within current session, go to prev
+        const nextIdx = currentMatchIndex - 1
+        setCurrentMatchIndex(nextIdx)
+        matches.forEach((el, idx) => {
+          if (idx === nextIdx) {
+            el.classList.add('search-match-active')
+            ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
+          } else {
+            el.classList.remove('search-match-active')
+          }
+        })
+      } else {
+        // Already at first match, jump to previous session's last match
+        const prevSessionIdx = (currentSessionIdx - 1 + displayedSessions.length) % displayedSessions.length
+        pendingMatchFocusRef.current = 'last'
+        setSelectedId(displayedSessions[prevSessionIdx].id)
+      }
+    }
+  }
+
+  // Find and update search matches in the detail DOM
+  useEffect(() => {
+    if (!search.trim()) {
+      setMatchCount(0)
+      setCurrentMatchIndex(0)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      if (!detailScrollRef.current) return
+      const matches = detailScrollRef.current.querySelectorAll('[data-search-match="true"]')
+      const count = matches.length
+      setMatchCount(count)
+
+      let targetIdx = 0
+      if (pendingMatchFocusRef.current === 'last' && count > 0) {
+        targetIdx = count - 1
+      }
+      setCurrentMatchIndex(targetIdx)
+      pendingMatchFocusRef.current = null // Reset ref pointer
+
+      if (count > 0) {
+        matches.forEach((el, idx) => {
+          if (idx === targetIdx) {
+            el.classList.add('search-match-active')
+            ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
+          } else {
+            el.classList.remove('search-match-active')
+          }
+        })
+      }
+    }, 150)
+
+    return () => clearTimeout(timer)
+  }, [search, selectedId, detail, loadingDetail])
+
+  // Support hotkeys / keyboard controls for match navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!search.trim() || matchCount === 0) return
+
+      const isInputFocused = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA'
+
+      if (isInputFocused && document.activeElement === document.querySelector('input[placeholder*="Search"]')) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          navigateMatch(e.shiftKey ? 'prev' : 'next')
+        }
+      } else if (!isInputFocused) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          navigateMatch('prev')
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          navigateMatch('next')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [search, matchCount, currentMatchIndex])
+
   async function handleCopy() {
 
     if (!selectedId) {
@@ -609,8 +758,35 @@ export default function App() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={text.searchPlaceholder}
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white/80 pl-11 pr-4 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:focus:border-slate-500"
+              className={`h-11 w-full rounded-2xl border border-slate-200 bg-white/80 pl-11 text-sm outline-none transition focus:border-slate-400 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:focus:border-slate-500 ${
+                search.trim() ? 'pr-32' : 'pr-4'
+              }`}
             />
+            {search.trim() && (
+              <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded-xl bg-slate-100/80 px-1.5 py-1 text-xs dark:bg-slate-800/80">
+                <span className="font-medium text-slate-500 dark:text-slate-400 select-none px-1">
+                  {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0/0'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigateMatch('prev')}
+                  disabled={matchCount === 0}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors"
+                  title="Previous match (ArrowLeft / Shift+Enter)"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateMatch('next')}
+                  disabled={matchCount === 0}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors"
+                  title="Next match (ArrowRight / Enter)"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           <button
@@ -690,17 +866,32 @@ export default function App() {
                     onClick={() => setSelectedId(session.id)}
                     className={selected ? 'session-card-active w-full text-left' : 'session-card w-full text-left'}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <h2 className="line-clamp-2 text-[14px] font-semibold leading-relaxed">
-                        {session.title || text.unnamedSession}
-                      </h2>
-                      <span className="shrink-0 text-[10px] opacity-70 mt-1">{formatShortDate(session.updatedAt)}</span>
+                    <div className="flex items-start justify-between gap-3 w-full">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                        <h2 className="line-clamp-2 text-[14px] font-semibold leading-relaxed">
+                          <HighlightText text={session.title || text.unnamedSession} query={search} />
+                        </h2>
+                        <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium ${
+                          selected
+                            ? 'text-slate-200/90'
+                            : 'text-slate-400 dark:text-slate-500'
+                        }`}>
+                          <span>创建: {formatShortDate(session.createdAt)}</span>
+                          <span>•</span>
+                          <span>更新: {formatShortDate(session.updatedAt)}</span>
+                        </div>
+                      </div>
+                      {search.trim() && typeof session.matchCount === 'number' && session.matchCount > 0 && (
+                        <span className="match-count-badge">
+                          {session.matchCount}次匹配
+                        </span>
+                      )}
                     </div>
                     {session.isImported && (
                       <div className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">{text.importedTag}</div>
                     )}
                     <p className="mt-2 line-clamp-2 text-xs leading-relaxed opacity-80">
-                      {session.preview || text.noPreview}
+                      <HighlightText text={session.preview || text.noPreview} query={search} />
                     </p>
                   </button>
                 )
@@ -716,10 +907,18 @@ export default function App() {
           <section className="animate-rise flex flex-col relative rounded-3xl border border-slate-200/60 bg-white/60 p-4 shadow-sm backdrop-blur-xl sm:p-5 dark:border-slate-800 dark:bg-slate-900/60 overflow-hidden">
             {selectedSession && (
               <div className="mb-4 rounded-3xl border border-slate-200/80 bg-white/80 px-5 py-4 dark:border-slate-700/80 dark:bg-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h1 className="line-clamp-2 text-xl font-bold leading-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
                     {selectedSession.title || text.unnamedSession}
                   </h1>
+                  {selectedSession.directory && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title={selectedSession.directory}>
+                      <Folder className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                      <span className="font-mono truncate max-w-[280px] sm:max-w-[400px] lg:max-w-[500px]">
+                        {selectedSession.directory}
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                     <span>{formatLongDate(selectedSession.updatedAt)}</span>
                     <span className="font-mono text-[10px] opacity-70">{selectedSession.id}</span>
@@ -848,11 +1047,11 @@ export default function App() {
                         <div className="space-y-1">
                           {message.parts && message.parts.length > 0 ? (
                             message.parts.map((part, idx) => (
-                              <MessagePartView key={part.id || idx} sessionId={selectedId} part={part} />
+                              <MessagePartView key={part.id || idx} sessionId={selectedId} part={part} searchQuery={search} />
                             ))
                           ) : (
                             <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
-                              {message.text}
+                              <HighlightText text={message.text} query={search} />
                             </div>
                           )}
                         </div>

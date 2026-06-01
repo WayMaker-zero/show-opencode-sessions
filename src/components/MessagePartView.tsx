@@ -123,7 +123,7 @@ function StepLogView({
   )
 }
 
-export function MessagePartView({ sessionId, part }: { sessionId: string | null; part: SessionMessagePart }) {
+export function MessagePartView({ sessionId, part, searchQuery }: { sessionId: string | null; part: SessionMessagePart; searchQuery?: string }) {
   const [resolvedPart, setResolvedPart] = useState(part)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
@@ -153,7 +153,7 @@ export function MessagePartView({ sessionId, part }: { sessionId: string | null;
 
   switch (resolvedPart.type) {
     case 'text':
-      return <MarkdownText text={resolvedPart.text || ''} />
+      return <MarkdownText text={resolvedPart.text || ''} searchQuery={searchQuery} />
       
     case 'tool':
       return <ToolCallView part={resolvedPart} onLoadDetail={ensurePartDetail} />
@@ -235,6 +235,6 @@ export function MessagePartView({ sessionId, part }: { sessionId: string | null;
           </div>
         )
       }
-      return <MarkdownText text={resolvedPart.text} />
+      return <MarkdownText text={resolvedPart.text} searchQuery={searchQuery} />
   }
 }

@@ -16,7 +16,7 @@ export function ThemeLangProvider({ children }: { children: ReactNode }) {
   // 默认夜间模式, 默认中文
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('opencode-theme') as Theme
-    return saved || 'dark'
+    return saved || 'light'
   })
   
   const [lang, setLangState] = useState<Language>(() => {
@@ -104,4 +104,45 @@ export const t = {
     importedTag: 'Imported',
     importedReadonly: 'Imported sessions are view-only and have no restore command.'
   }
+}
+
+export function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query || !query.trim()) {
+    return <>{text}</>
+  }
+  const cleanQuery = query.trim().toLowerCase()
+  if (!text.toLowerCase().includes(cleanQuery)) {
+    return <>{text}</>
+  }
+
+  const parts = []
+  let currentIdx = 0
+  const textLower = text.toLowerCase()
+  const qLen = cleanQuery.length
+
+  while (true) {
+    const matchIdx = textLower.indexOf(cleanQuery, currentIdx)
+    if (matchIdx === -1) {
+      parts.push(text.substring(currentIdx))
+      break
+    }
+
+    if (matchIdx > currentIdx) {
+      parts.push(text.substring(currentIdx, matchIdx))
+    }
+
+    const matchText = text.substring(matchIdx, matchIdx + qLen)
+    parts.push(
+      <mark
+        key={matchIdx}
+        data-search-match="true"
+        className="search-match"
+      >
+        {matchText}
+      </mark>
+    )
+    currentIdx = matchIdx + qLen
+  }
+
+  return <>{parts}</>
 }

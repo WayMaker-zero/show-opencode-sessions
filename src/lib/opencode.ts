@@ -15,6 +15,7 @@ export type SessionListItem = {
     files: number
   }
   preview: string
+  matchCount?: number
 }
 
 export type SessionMessagePart = {

@@ -58,6 +58,7 @@ export type SessionListItem = {
     files: number
   }
   preview: string
+  matchCount?: number
 }
 
 export type SessionMessagePart = {
@@ -207,7 +208,7 @@ function mapSessionRow(row: SessionRow, preview: string): SessionListItem {
   }
 }
 
-function enrichSessions(db: Database, rows: SessionRow[]) {
+function enrichSessions(db: Database, rows: SessionRow[], query?: string) {
   return rows.map((row) => {
     const previewParts = getRows<PartRow>(
       db,
@@ -221,7 +222,11 @@ function enrichSessions(db: Database, rows: SessionRow[]) {
       [row.id],
     )
 
-    return mapSessionRow(row, summarizeTextParts(previewParts))
+    const sessionItem = mapSessionRow(row, summarizeTextParts(previewParts))
+    if (query) {
+      sessionItem.matchCount = countMatchesInSession(db, row.id, query)
+    }
+    return sessionItem
   })
 }
 
@@ -308,7 +313,7 @@ export async function getSessions(options: { query?: string; offset?: number; li
     )
 
     return {
-      items: enrichSessions(db, rows),
+      items: enrichSessions(db, rows, query),
       total,
     }
   } finally {
@@ -339,6 +344,61 @@ function partToText(data: string) {
   }
 
   return ''
+}
+
+function countOccurrences(str: string, search: string): number {
+  if (!search) return 0
+  let count = 0
+  let pos = str.indexOf(search)
+  while (pos !== -1) {
+    count++
+    pos = str.indexOf(search, pos + search.length)
+  }
+  return count
+}
+
+function countMatchesInSession(db: Database, sessionId: string, query: string): number {
+  if (!query) return 0
+  const cleanQuery = query.toLowerCase()
+  let totalCount = 0
+
+  // 1. 匹配标题
+  const titleRow = getRows<{ title: string }>(db, 'SELECT title FROM session WHERE id = ? LIMIT 1', [sessionId])[0]
+  if (titleRow?.title) {
+    totalCount += countOccurrences(titleRow.title.toLowerCase(), cleanQuery)
+  }
+
+  // 2. 匹配所有的消息片段 (Part Data)
+  const parts = getRows<PartRow>(db, 'SELECT data FROM part WHERE session_id = ?', [sessionId])
+  for (const part of parts) {
+    const text = partToText(part.data)
+    if (text) {
+      totalCount += countOccurrences(text.toLowerCase(), cleanQuery)
+    }
+
+    const payload = safeParse<any>(part.data)
+    if (payload) {
+      if (payload.type === 'tool') {
+        if (payload.tool) totalCount += countOccurrences(payload.tool.toLowerCase(), cleanQuery)
+        if (payload.state?.input) {
+          const inputStr = typeof payload.state.input === 'string' ? payload.state.input : JSON.stringify(payload.state.input)
+          totalCount += countOccurrences(inputStr.toLowerCase(), cleanQuery)
+        }
+        if (payload.state?.output) {
+          const outputStr = typeof payload.state.output === 'string' ? payload.state.output : JSON.stringify(payload.state.output)
+          totalCount += countOccurrences(outputStr.toLowerCase(), cleanQuery)
+        }
+      } else if (payload.type === 'patch') {
+        if (payload.files) totalCount += countOccurrences(JSON.stringify(payload.files).toLowerCase(), cleanQuery)
+        if (payload.data?.data) totalCount += countOccurrences(payload.data.data.toLowerCase(), cleanQuery)
+      } else if (payload.type === 'file') {
+        if (payload.filename) totalCount += countOccurrences(payload.filename.toLowerCase(), cleanQuery)
+        if (payload.data?.data) totalCount += countOccurrences(payload.data.data.toLowerCase(), cleanQuery)
+      }
+    }
+  }
+
+  return totalCount
 }
 
 type SessionDetailOptions = {

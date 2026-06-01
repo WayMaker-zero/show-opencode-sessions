@@ -2,6 +2,7 @@ import { CodeBlock } from './CodeBlock'
 import { Terminal, FileCode } from 'lucide-react'
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { HighlightText } from '../lib/theme-lang'
 
 // Render tool call-like blocks
 function InlineToolCall({ title, input, content }: { title: string, input?: string, content?: string }) {
@@ -67,7 +68,7 @@ function InlineXmlContent({ title, content }: { title: string, content: string }
   )
 }
 
-export function MarkdownText({ text }: { text: string }) {
+export function MarkdownText({ text, searchQuery }: { text: string; searchQuery?: string }) {
   if (!text) return null
 
   let blocks: { type: 'text' | 'pasted' | 'tool-call' | 'xml'; content: string; lines?: number; title?: string; input?: string }[] = [];
@@ -250,7 +251,7 @@ export function MarkdownText({ text }: { text: string }) {
               }
               return (
                 <div key={index} className="whitespace-pre-wrap break-words">
-                  {part.content}
+                  <HighlightText text={part.content} query={searchQuery || ''} />
                 </div>
               )
             })}
