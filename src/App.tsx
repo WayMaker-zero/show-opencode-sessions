@@ -183,6 +183,16 @@ export default function App() {
     importedIdsRef.current = new Set(importedSessions.map((record) => record.session.id))
   }, [importedSessions])
 
+  // Web tab heartbeat to keep the backend alive
+  useEffect(() => {
+    const sendHeartbeat = () => {
+      fetch('/api/opencode/heartbeat').catch(() => {})
+    }
+    sendHeartbeat()
+    const interval = setInterval(sendHeartbeat, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
   async function loadSessionPage(reset: boolean) {
     if (reset) {
       sessionBaseOffsetRef.current = 0

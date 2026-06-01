@@ -113,7 +113,7 @@ function getSqlJs() {
   return sqlJsPromise
 }
 
-function resolveOpencodeRoot() {
+export function resolveOpencodeRoot() {
   const root = path.join(homedir(), '.local', 'share', 'opencode')
   const dbPath = path.join(root, 'opencode.db')
   const storagePath = path.join(root, 'storage')
@@ -123,6 +123,17 @@ function resolveOpencodeRoot() {
   }
 
   return { root, dbPath, storagePath }
+}
+
+let lastHeartbeatTime = Date.now() + 15000 // 默认 15 秒启动保护期
+let isShutdownEnabled = false
+
+export function enableShutdown() {
+  isShutdownEnabled = true
+}
+
+export function getLastHeartbeatTime() {
+  return lastHeartbeatTime
 }
 
 async function openDatabase() {
@@ -675,6 +686,28 @@ export async function handleOpencodeApi(req: IncomingMessage, res: ServerRespons
   const url = new URL(rawUrl, 'http://localhost')
 
   try {
+    if (url.pathname === '/api/opencode/ping') {
+      sendJson(res, 200, { ok: true, app: 'show-opencode-sessions' })
+      return
+    }
+
+    if (url.pathname === '/api/opencode/heartbeat') {
+      lastHeartbeatTime = Date.now()
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    if (url.pathname === '/api/opencode/shutdown') {
+      sendJson(res, 200, { ok: true })
+      if (isShutdownEnabled) {
+        console.log('[Server] 用户请求物理停机。正在退出...')
+        setTimeout(() => {
+          process.exit(0)
+        }, 100)
+      }
+      return
+    }
+
     if (url.pathname === '/api/opencode/meta') {
       await handleMeta(res)
       return
