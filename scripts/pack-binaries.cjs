@@ -51,6 +51,8 @@ files.forEach(file => {
             fs.chmodSync(destBinaryPath, '755');
 
             // Write minimal Info.plist
+            const pkg = require('../package.json');
+            const version = pkg.version || '1.0.6';
             const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -62,7 +64,7 @@ files.forEach(file => {
     <key>CFBundleName</key>
     <string>ShowOpencodeSessions</string>
     <key>CFBundleVersion</key>
-    <string>1.0.5</string>
+    <string>${version}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key>
