@@ -45,10 +45,20 @@ files.forEach(file => {
             // Create directory structure
             fs.mkdirSync(macosDir, { recursive: true });
 
-            // Copy binary and ensure executable permission
-            const destBinaryPath = path.join(macosDir, 'show-opencode-sessions');
+            // Copy binary as the backend core
+            const destBinaryPath = path.join(macosDir, 'show-opencode-sessions-backend');
             fs.copyFileSync(filePath, destBinaryPath);
             fs.chmodSync(destBinaryPath, '755');
+
+            // Create launcher script that double-forks/detaches backend and exits immediately
+            const launcherPath = path.join(macosDir, 'show-opencode-sessions');
+            const launcherContent = `#!/bin/bash
+DIR="$( cd "$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+nohup "\$DIR/show-opencode-sessions-backend" >/dev/null 2>&1 &
+exit 0
+`;
+            fs.writeFileSync(launcherPath, launcherContent, 'utf8');
+            fs.chmodSync(launcherPath, '755');
 
             // Write minimal Info.plist
             const pkg = require('../package.json');
@@ -64,7 +74,7 @@ files.forEach(file => {
     <key>CFBundleName</key>
     <string>ShowOpencodeSessions</string>
     <key>CFBundleVersion</key>
-    <string>${version}</string>
+    <string>\${version}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key>

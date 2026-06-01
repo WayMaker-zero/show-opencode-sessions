@@ -81,7 +81,7 @@
   2. 接着通过 `esbuild` 将 Node.js 服务端入口 `server.ts` 及其依赖（如 `opencode-api.ts`）打包成单文件 CommonJS 脚本 `build/server.cjs`。
   3. 最后利用 `pkg`，将 `build/server.cjs` 连同前端的 `dist/` 目录和 `sql.js` 的 `wasm` 静态文件一起打包。
   4. 打包完成后，额外通过自定义脚本 `scripts/pack-binaries.cjs` 将多平台产物压缩包装：
-     - **macOS (Intel/ARM)**：自动封装入极简的原生 `ShowOpencodeSessions.app` 应用包中（配置标准的 `Info.plist`），随后压缩打包。
+     - **macOS (Intel/ARM)**：自动封装入极简的原生 `ShowOpencodeSessions.app` 应用包中（配置标准的 `Info.plist`），**为了完美规避 macOS 反复双击时提示“应用程序无响应”的 OS 机制，采用了“启动脚本 + 脱离后台进程”的双层结构设计（`show-opencode-sessions` 启动脚本拉起 `show-opencode-sessions-backend` 二进制后端后立即退出）**，随后整体压缩打包。
      - **Windows/Linux**：正常封装为 `.zip` / `.tar.gz` 纯二进制分发文件。
 
 - **构建产物**：
